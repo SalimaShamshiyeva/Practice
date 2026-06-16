@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚡ AI-ERP — Система управления проектами</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "Inter", system-ui, sans-serif; background: #0A1628; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0A1628; }
+    ::-webkit-scrollbar-thumb { background: #1E3A6E; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3B82F6; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+import { useState, useEffect } from "react";
+
+// ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
+// Palette: rich blue UI — deep blue backgrounds, bright blue accents
+const T = {
+  bg: "#0A1628",
+  surface: "#0F2040",
+  surfaceHover: "#162B55",
+  border: "#1E3A6E",
+  borderLight: "#162B55",
+  accent: "#3B82F6",
+  accentHover: "#60A5FA",
+  success: "#22C55E",
+  warning: "#F59E0B",
+  danger: "#EF4444",
+  textPrimary: "#E8F0FF",
+  textSecondary: "#7BA3D4",
+  textMuted: "#3A5A8A",
+};
+
+// ─── INITIAL DATA ─────────────────────────────────────────────────────────────
+const INITIAL_PRODUCTS = [
+  { id: 1, name: "Станок модульный", category: "Оборудование", stock: 2, avgPrice: 1500000 },
+  { id: 2, name: "Дрон", category: "Электроника", stock: 0, avgPrice: 850000 },
+  { id: 3, name: "Мольберт", category: "Инструменты", stock: 5, avgPrice: 22000 },
+  { id: 4, name: "Сварочный аппарат", category: "Оборудование", stock: 3, avgPrice: 180000 },
+  { id: 5, name: "Перфоратор Bosch", category: "Инструменты", stock: 8, avgPrice: 95000 },
+];
+
+const INITIAL_PROJECTS = [
+  {
+    id: 1, client: "ТОО «Альфа Строй»", pm: "Айдар Бекенов", status: "Активный закуп",
+    margin: 30, deadline: "2025-08-15", margin_actual: 28,
+    items: [
+      { productId: 1, name: "Станок модульный", qty: 2, cost: 1500000, price: 2100000, status: "На складе" },
+      { productId: 2, name: "Дрон", qty: 1, cost: 850000, price: 1200000, status: "Заказан" },
+    ],
+    invoices: [
+      { id: 101, supplier: "ТехноПлюс", amount: 3000000, file: "счет_101.pdf", status: "Оплачено" },
+      { id: 102, supplier: "АэроТех", amount: 850000, file: "счет_102.pdf", status: "Ждет одобрения", alert: true, alertText: "Цена превышает историческую на 81%!" },
+    ],
+    docs: { doverennost: false, esf: true, nakladnaya: false, avr: false },
+    contract: "Договор_1.pdf",
+  },
+  {
+    id: 2, client: "АО «КазСнаб»", pm: "Динара Сейткали", status: "Черновик КП",
+    margin: 25, deadline: "2025-09-01", margin_actual: null,
+    items: [
+      { productId: 3, name: "Мольберт", qty: 10, cost: 22000, price: 30000, status: "Новый" },
+      { productId: 5, name: "Перфоратор Bosch", qty: 5, cost: 95000, price: 130000, status: "Новый" },
+    ],
+    invoices: [],
+    docs: { doverennost: false, esf: false, nakladnaya: false, avr: false },
+    contract: null,
+  },
+];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+const statusColor = (s) => {
+  if (["Завершено", "Оплачено", "Отгружен", "На складе"].includes(s)) return T.success;
+  if (["Активный закуп", "Заказан", "В резерве"].includes(s)) return T.accent;
+  if (["Ожидание подписания", "Ждет одобрения", "Новый"].includes(s)) return T.warning;
+  if (["Заблокировано", "Красный алерт"].includes(s)) return T.danger;
+  return T.textSecondary;
+};
+
+const fmt = (n) => n?.toLocaleString("ru-KZ") + " тг";
+const pct = (a, b) => b ? Math.round((a - b) / b * 100) : 0;
+
+// ─── UI COMPONENTS ────────────────────────────────────────────────────────────
+const Badge = ({ label }) => (
+  <span style={{
+    background: statusColor(label) + "22", color: statusColor(label),
+    border: `1px solid ${statusColor(label)}44`,
+    borderRadius: 6, padding: "2px 10px", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap"
+  }}>{label}</span>
+);
+
+const Btn = ({ onClick, children, variant = "primary", size = "md", disabled }) => {
+  const base = {
+    border: "none", borderRadius: 8, cursor: disabled ? "not-allowed" : "pointer",
+    fontWeight: 600, fontFamily: "inherit", transition: "all .15s",
+    opacity: disabled ? 0.45 : 1,
+    padding: size === "sm" ? "5px 12px" : "9px 18px",
+    fontSize: size === "sm" ? 12 : 14,
+  };
+  const variants = {
+    primary: { background: T.accent, color: "#fff" },
+    success: { background: T.success, color: "#fff" },
+    danger: { background: T.danger, color: "#fff" },
+    ghost: { background: "transparent", color: T.textSecondary, border: `1px solid ${T.border}` },
+    warning: { background: T.warning, color: "#0D1117" },
+  };
+  return <button style={{ ...base, ...variants[variant] }} onClick={disabled ? undefined : onClick}>{children}</button>;
+};
+
+const Card = ({ children, style }) => (
+  <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: 20, ...style }}>{children}</div>
+);
+
+const Alert = ({ text, type = "warning" }) => {
+  const col = type === "danger" ? T.danger : type === "success" ? T.success : T.warning;
+  return (
+    <div style={{ background: col + "15", border: `1px solid ${col}44`, borderRadius: 8, padding: "10px 14px", color: col, fontSize: 13, fontWeight: 500, display: "flex", gap: 8, alignItems: "center" }}>
+      <span>{type === "danger" ? "🚨" : type === "success" ? "✅" : "⚠️"}</span>
+      {text}
+    </div>
+  );
+};
+
+const Modal = ({ title, children, onClose }) => (
+  <div style={{ position: "fixed", inset: 0, background: "#00000088", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 16, padding: 28, minWidth: 480, maxWidth: 640, maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <h3 style={{ margin: 0, color: T.textPrimary, fontSize: 18 }}>{title}</h3>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: T.textSecondary, fontSize: 20, cursor: "pointer" }}>×</button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+const TABS = [
+  { id: "dashboard", icon: "📊", label: "Дашборд" },
+  { id: "parser", icon: "🤖", label: "AI-Парсер" },
+  { id: "projects", icon: "📁", label: "Проекты / КП" },
+  { id: "procurement", icon: "🛒", label: "Закуп" },
+  { id: "warehouse", icon: "🏭", label: "Склад" },
+  { id: "accounting", icon: "💼", label: "Бухгалтерия" },
+  { id: "catalog", icon: "📦", label: "Каталог товаров" },
+];
+
+const ROLES = ["ПМ", "Комдир", "Бухгалтер", "Завсклад"];
+
+// ─── MODULE 1: AI PARSER ──────────────────────────────────────────────────────
+function ParserModule({ products }) {
+  const [file, setFile] = useState(null);
+  const [stage, setStage] = useState("idle"); // idle | parsing | result
+  const [rows, setRows] = useState([]);
+  const [manualPrices, setManualPrices] = useState({});
+  const [markup, setMarkup] = useState(25);
+  const [toast, setToast] = useState(null);
+
+  const DEMO_ROWS = [
+    { raw: "Станок модульный", qty: 2 },
+    { raw: "Дрон", qty: 1 },
+    { raw: "Сенсор X-99", qty: 5 },
+  ];
+
+  const analyze = (rawName) => {
+    const found = products.find(p => p.name.toLowerCase().includes(rawName.toLowerCase().slice(0, 5)));
+    if (found && found.stock > 0) return { status: "🟢 На складе", cost: found.avgPrice, label: "На складе" };
+    if (found && found.stock === 0) return { status: "🟡 Ранее закупали", cost: found.avgPrice, label: "Ранее закупали" };
+    return { status: "🔴 Новый товар", cost: null, label: "Новый товар" };
+  };
+
+  const handleParse = () => {
+    setStage("parsing");
+    setTimeout(() => {
+      setRows(DEMO_ROWS.map(r => ({ ...r, ...analyze(r.raw) })));
+      setStage("result");
+    }, 1800);
+  };
+
+  const getCost = (row, i) => {
+    if (row.cost) return row.cost;
+    return manualPrices[i] ? parseInt(manualPrices[i]) : null;
+  };
+
+  const getPrice = (row, i) => {
+    const c = getCost(row, i);
+    return c ? Math.round(c * (1 + markup / 100)) : null;
+  };
+
+  const total = rows.reduce((s, r, i) => s + (getPrice(r, i) || 0) * r.qty, 0);
+  const allFilled = rows.every((r, i) => getCost(r, i) !== null);
+
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  return (
+    <div>
+      <h2 style={{ color: T.textPrimary, marginTop: 0, fontSize: 22 }}>🤖 AI-Парсер — Формирование КП</h2>
+      <p style={{ color: T.textSecondary, marginTop: -8, marginBottom: 20 }}>Загрузите файл заказчика (PDF/Excel). ИИ извлечёт товары и найдёт цены из базы.</p>
+
+      {toast && <div style={{ position: "fixed", top: 24, right: 24, zIndex: 2000 }}><Alert text={toast.msg} type={toast.type} /></div>}
+
+      {stage === "idle" && (
+        <Card>
+          <div style={{ border: `2px dashed ${T.border}`, borderRadius: 12, padding: 40, textAlign: "center" }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>📄</div>
+            <div style={{ color: T.textSecondary, marginBottom: 16 }}>Перетащите PDF или Excel от заказчика, или нажмите кнопку</div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 12 }}>
+              <Btn onClick={() => { setFile("demo_spec.pdf"); }}>Выбрать файл</Btn>
+            </div>
+            {file && (
+              <div style={{ marginTop: 12 }}>
+                <Alert text={`Файл загружен: ${file}`} type="success" />
+                <div style={{ marginTop: 16 }}>
+                  <Btn onClick={handleParse} variant="success">🚀 Запустить AI-Парсер</Btn>
+                </div>
+              </div>
+            )}
+            <div style={{ color: T.textMuted, fontSize: 12, marginTop: 8 }}>Демо-режим: нажмите «Выбрать файл», затем «Запустить»</div>
+          </div>
+        </Card>
+      )}
+
+      {stage === "parsing" && (
+        <Card style={{ textAlign: "center", padding: 60 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>⚙️</div>
+          <div style={{ color: T.textPrimary, fontSize: 18, marginBottom: 8 }}>AI анализирует файл...</div>
+          <div style={{ color: T.textSecondary }}>Извлечение товаров и поиск цен по базе данных</div>
+          <div style={{ marginTop: 24, display: "flex", justifyContent: "center", gap: 6 }}>
+            {[0,1,2].map(i => (
+              <div key={i} style={{ width: 10, height: 10, borderRadius: "50%", background: T.accent, animation: `pulse ${0.8 + i * 0.2}s infinite alternate`, opacity: 0.7 + i * 0.15 }} />
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {stage === "result" && (
+        <div>
+          <div style={{ display: "flex", gap: 16, marginBottom: 16, alignItems: "center" }}>
+            <Card style={{ flex: 1, padding: 14 }}>
+              <div style={{ color: T.textSecondary, fontSize: 12 }}>Файл</div>
+              <div style={{ color: T.textPrimary, fontWeight: 600 }}>demo_spec.pdf</div>
+            </Card>
+            <Card style={{ padding: 14 }}>
+              <div style={{ color: T.textSecondary, fontSize: 12 }}>Наценка %</div>
+              <input type="number" value={markup} onChange={e => setMarkup(Number(e.target.value))}
+                style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 6, color: T.textPrimary, padding: "4px 8px", width: 70, fontSize: 14 }} />
+            </Card>
+            <Card style={{ padding: 14 }}>
+              <div style={{ color: T.textSecondary, fontSize: 12 }}>Итог КП</div>
+              <div style={{ color: T.accent, fontWeight: 700, fontSize: 18 }}>{fmt(total)}</div>
+            </Card>
+          </div>
+
+          {!allFilled && <Alert text="Заполните цены для новых товаров (отмечены красным) перед утверждением КП" />}
+          <div style={{ marginBottom: 16 }} />
+
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: T.bg }}>
+                  {["Товар из файла", "Кол-во", "Статус", "Себестоимость (ед.)", "Цена продажи (ед.)", "Сумма"].map(h => (
+                    <th key={h} style={{ padding: "12px 16px", textAlign: "left", color: T.textSecondary, fontSize: 12, fontWeight: 600, borderBottom: `1px solid ${T.border}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => {
+                  const cost = getCost(row, i);
+                  const price = getPrice(row, i);
+                  const isNew = row.label === "Новый товар";
+                  return (
+                    <tr key={i} style={{ borderBottom: `1px solid ${T.borderLight}`, background: isNew ? T.danger + "08" : "transparent" }}>
+                      <td style={{ padding: "12px 16px", color: T.textPrimary, fontWeight: 500 }}>{row.raw}</td>
+                      <td style={{ padding: "12px 16px", color: T.textPrimary }}>{row.qty}</td>
+                      <td style={{ padding: "12px 16px" }}><Badge label={row.label} /></td>
+                      <td style={{ padding: "12px 16px" }}>
+                        {isNew ? (
+                          <input placeholder="Введите цену" type="number"
+                            value={manualPrices[i] || ""}
+                            onChange={e => setManualPrices(p => ({ ...p, [i]: e.target.value }))}
+                            style={{ background: T.bg, border: `1px solid ${T.danger}`, borderRadius: 6, color: T.textPrimary, padding: "6px 10px", width: 150, fontSize: 13 }} />
+                        ) : (
+                          <span style={{ color: T.textSecondary }}>{fmt(cost)}</span>
+                        )}
+                      </td>
+                      <td style={{ padding: "12px 16px", color: T.accent }}>{price ? fmt(price) : "—"}</td>
+                      <td style={{ padding: "12px 16px", color: T.textPrimary, fontWeight: 600 }}>{price ? fmt(price * row.qty) : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+
+          <div style={{ display: "flex", gap: 12, marginTop: 20, justifyContent: "flex-end" }}>
+            <Btn variant="ghost" onClick={() => { setStage("idle"); setFile(null); setRows([]); }}>Загрузить другой файл</Btn>
+            <Btn variant="success" disabled={!allFilled} onClick={() => showToast("КП отправлено Комдиру на утверждение!", "success")}>
+              ✅ Отправить КП на утверждение
+            </Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MODULE 2+3: PROJECTS ─────────────────────────────────────────────────────
+function ProjectsModule({ projects, setProjects, role }) {
+  const [selected, setSelected] = useState(null);
+  const [modal, setModal] = useState(null);
+  const [invoiceAlert, setInvoiceAlert] = useState(null);
+
+  const proj = projects.find(p => p.id === selected);
+
+  const updateProject = (id, patch) => {
+    setProjects(ps => ps.map(p => p.id === id ? { ...p, ...patch } : p));
+  };
+
+  const approveKP = (id) => {
+    updateProject(id, { status: "Ожидание подписания" });
+    setModal({ type: "kp_approved" });
+  };
+
+  const generateContract = (id) => {
+    updateProject(id, { contract: `Договор_${id}.pdf`, status: "Ожидание подписания" });
+  };
+
+  const signContract = (id) => {
+    updateProject(id, { status: "Активный закуп" });
+  };
+
+  const approveInvoice = (projId, invId) => {
+    setProjects(ps => ps.map(p => {
+      if (p.id !== projId) return p;
+      return { ...p, invoices: p.invoices.map(inv => inv.id === invId ? { ...inv, status: "Одобрено", alert: false } : inv) };
+    }));
+  };
+
+  const payInvoice = (projId, invId) => {
+    setProjects(ps => ps.map(p => {
+      if (p.id !== projId) return p;
+      return { ...p, invoices: p.invoices.map(inv => inv.id === invId ? { ...inv, status: "Оплачено" } : inv) };
+    }));
+  };
+
+  const addInvoice = (projId, inv) => {
+    const histPrice = inv.productId ? projects.flatMap(p => p.items).find(i => i.productId === inv.productId)?.cost : null;
+    const needAlert = histPrice && inv.amount > histPrice * 1.2;
+    const alertPct = histPrice ? Math.round((inv.amount - histPrice) / histPrice * 100) : 0;
+    setProjects(ps => ps.map(p => {
+      if (p.id !== projId) return p;
+      const newInv = { id: Date.now(), ...inv, status: needAlert ? "Ждет одобрения" : "Ждет одобрения", alert: needAlert, alertText: needAlert ? `Цена превышает историческую на ${alertPct}%!` : null };
+      return { ...p, invoices: [...p.invoices, newInv] };
+    }));
+    if (inv.alertForce) setInvoiceAlert(`🚨 Красный Алерт: цена превышает историческую более чем на 20%! Счёт отправлен Комдиру.`);
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 20, height: "100%" }}>
+      {/* Project list */}
+      <div style={{ width: 280, flexShrink: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <h3 style={{ margin: 0, color: T.textPrimary, fontSize: 16 }}>Проекты</h3>
+          <Btn size="sm" onClick={() => {
+            const newP = { id: Date.now(), client: "Новый клиент", pm: "ПМ", status: "Черновик КП", margin: 25, deadline: "", margin_actual: null, items: [], invoices: [], docs: { doverennost: false, esf: false, nakladnaya: false, avr: false }, contract: null };
+            setProjects(ps => [...ps, newP]);
+            setSelected(newP.id);
+          }}>+ Новый</Btn>
+        </div>
+        {projects.map(p => (
+          <div key={p.id} onClick={() => setSelected(p.id)} style={{
+            background: selected === p.id ? T.accent + "22" : T.surface,
+            border: `1px solid ${selected === p.id ? T.accent : T.border}`,
+            borderRadius: 10, padding: "12px 14px", marginBottom: 8, cursor: "pointer",
+          }}>
+            <div style={{ color: T.textPrimary, fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{p.client}</div>
+            <div style={{ color: T.textSecondary, fontSize: 12, marginBottom: 8 }}>ПМ: {p.pm}</div>
+            <Badge label={p.status} />
+            {p.invoices.some(i => i.alert) && <span style={{ marginLeft: 6, fontSize: 12, color: T.danger }}>🚨</span>}
+          </div>
+        ))}
+      </div>
+
+      {/* Project detail */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {!proj ? (
+          <Card style={{ textAlign: "center", padding: 60, color: T.textSecondary }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>📁</div>
+            Выберите проект из списка
+          </Card>
+        ) : (
+          <div>
+            {invoiceAlert && (
+              <div style={{ marginBottom: 12 }}>
+                <Alert text={invoiceAlert} type="danger" />
+              </div>
+            )}
+
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+              <div>
+                <h2 style={{ margin: 0, color: T.textPrimary, fontSize: 20 }}>{proj.client}</h2>
+                <div style={{ color: T.textSecondary, fontSize: 13, marginTop: 4 }}>ПМ: {proj.pm} · Дедлайн: {proj.deadline || "не задан"}</div>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <Badge label={proj.status} />
+                {role === "Комдир" && proj.status === "Черновик КП" && (
+                  <Btn size="sm" variant="success" onClick={() => approveKP(proj.id)}>✅ Утвердить КП</Btn>
+                )}
+                {proj.status === "Ожидание подписания" && !proj.contract && (
+                  <Btn size="sm" onClick={() => generateContract(proj.id)}>📄 Сгенерировать договор</Btn>
+                )}
+                {proj.status === "Ожидание подписания" && proj.contract && (
+                  <Btn size="sm" variant="success" onClick={() => signContract(proj.id)}>✍️ Подписано</Btn>
+                )}
+              </div>
+            </div>
+
+            {/* KPI row */}
+            <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+              {[
+                { label: "Маржа (план)", val: proj.margin + "%", color: T.textPrimary },
+                { label: "Маржа (факт)", val: proj.margin_actual ? proj.margin_actual + "%" : "—", color: proj.margin_actual && proj.margin_actual < proj.margin ? T.danger : T.success },
+                { label: "Позиций", val: proj.items.length },
+                { label: "Счетов", val: proj.invoices.length },
+                { label: "Договор", val: proj.contract ? "✅ Есть" : "⏳ Нет", color: proj.contract ? T.success : T.warning },
+              ].map(k => (
+                <Card key={k.label} style={{ flex: 1, padding: "12px 14px" }}>
+                  <div style={{ color: T.textSecondary, fontSize: 11, marginBottom: 4 }}>{k.label}</div>
+                  <div style={{ color: k.color || T.textPrimary, fontWeight: 700, fontSize: 16 }}>{k.val}</div>
+                </Card>
+              ))}
+            </div>
+
+            {/* Items */}
+            <Card style={{ marginBottom: 16, padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.border}`, fontWeight: 600, color: T.textPrimary }}>Спецификация товаров</div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: T.bg }}>
+                    {["Товар", "Кол-во", "Себестоимость", "Цена продажи", "Маржа", "Статус"].map(h => (
+                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: T.textSecondary, fontSize: 12, borderBottom: `1px solid ${T.border}` }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {proj.items.map((item, i) => {
+                    const m = item.price && item.cost ? Math.round((item.price - item.cost) / item.price * 100) : null;
+                    return (
+                      <tr key={i} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
+                        <td style={{ padding: "10px 16px", color: T.textPrimary }}>{item.name}</td>
+                        <td style={{ padding: "10px 16px", color: T.textSecondary }}>{item.qty}</td>
+                        <td style={{ padding: "10px 16px", color: T.textSecondary }}>{fmt(item.cost)}</td>
+                        <td style={{ padding: "10px 16px", color: T.textPrimary }}>{fmt(item.price)}</td>
+                        <td style={{ padding: "10px 16px", color: m && m >= 20 ? T.success : T.warning }}>{m ? m + "%" : "—"}</td>
+                        <td style={{ padding: "10px 16px" }}><Badge label={item.status} /></td>
+                      </tr>
+                    );
+                  })}
+                  {proj.items.length === 0 && (
+                    <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: T.textMuted }}>Товары не добавлены</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </Card>
+
+            {/* Invoices */}
+            <Card style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontWeight: 600, color: T.textPrimary }}>Счета на оплату</span>
+                {(role === "ПМ" || role === "Комдир") && proj.status === "Активный закуп" && (
+                  <Btn size="sm" onClick={() => setModal({ type: "add_invoice", projId: proj.id })}>+ Добавить счёт</Btn>
+                )}
+              </div>
+              {proj.invoices.map(inv => (
+                <div key={inv.id} style={{ padding: "12px 16px", borderBottom: `1px solid ${T.borderLight}` }}>
+                  {inv.alert && <Alert text={`🚨 ${inv.alertText}`} type="danger" />}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: inv.alert ? 8 : 0 }}>
+                    <div>
+                      <span style={{ color: T.textPrimary, fontWeight: 500 }}>{inv.supplier}</span>
+                      <span style={{ color: T.textSecondary, fontSize: 13, marginLeft: 12 }}>📎 {inv.file}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <span style={{ color: T.accent, fontWeight: 700 }}>{fmt(inv.amount)}</span>
+                      <Badge label={inv.status} />
+                      {role === "Комдир" && inv.status === "Ждет одобрения" && (
+                        <Btn size="sm" variant="success" onClick={() => approveInvoice(proj.id, inv.id)}>Одобрить</Btn>
+                      )}
+                      {role === "Бухгалтер" && inv.status === "Одобрено" && (
+                        <Btn size="sm" variant="success" onClick={() => payInvoice(proj.id, inv.id)}>Оплатить</Btn>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {proj.invoices.length === 0 && (
+                <div style={{ padding: 24, textAlign: "center", color: T.textMuted }}>Счетов нет</div>
+              )}
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Modals */}
+      {modal?.type === "kp_approved" && (
+        <Modal title="КП утверждено!" onClose={() => setModal(null)}>
+          <Alert text="КП успешно утверждено. Теперь доступна кнопка «Сгенерировать договор»." type="success" />
+          <div style={{ marginTop: 16 }}><Btn onClick={() => setModal(null)}>Закрыть</Btn></div>
+        </Modal>
+      )}
+      {modal?.type === "add_invoice" && (
+        <AddInvoiceModal projId={modal.projId} onClose={() => { setModal(null); setInvoiceAlert(null); }} onAdd={addInvoice} />
+      )}
+    </div>
+  );
+}
+
+function AddInvoiceModal({ projId, onClose, onAdd }) {
+  const [form, setForm] = useState({ supplier: "", amount: "", file: "" });
+  const [forceAlert, setForceAlert] = useState(false);
+
+  const handleSubmit = () => {
+    if (!form.supplier || !form.amount) return;
+    const amount = parseInt(form.amount);
+    // Demo: flag if amount > 30000 (simulating historical mismatch)
+    const needAlert = amount > 30000;
+    onAdd(projId, { supplier: form.supplier, amount, file: form.file || "счет.pdf", alertForce: needAlert });
+    onClose();
+  };
+
+  return (
+    <Modal title="Добавить счёт на оплату" onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div>
+          <label style={{ color: T.textSecondary, fontSize: 13, display: "block", marginBottom: 4 }}>Поставщик</label>
+          <input value={form.supplier} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))}
+            placeholder="Название компании" style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, color: T.textPrimary, padding: "8px 12px", fontSize: 14, boxSizing: "border-box" }} />
+        </div>
+        <div>
+          <label style={{ color: T.textSecondary, fontSize: 13, display: "block", marginBottom: 4 }}>Сумма (тг)</label>
+          <input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+            placeholder="0" style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, color: T.textPrimary, padding: "8px 12px", fontSize: 14, boxSizing: "border-box" }} />
+          <div style={{ color: T.textMuted, fontSize: 11, marginTop: 4 }}>Совет: введите сумму &gt; 30 000 тг для демо-алерта</div>
+        </div>
+        <div>
+          <label style={{ color: T.textSecondary, fontSize: 13, display: "block", marginBottom: 4 }}>Файл счёта</label>
+          <input value={form.file} onChange={e => setForm(f => ({ ...f, file: e.target.value }))}
+            placeholder="счет.pdf" style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, color: T.textPrimary, padding: "8px 12px", fontSize: 14, boxSizing: "border-box" }} />
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+          <Btn variant="ghost" onClick={onClose}>Отмена</Btn>
+          <Btn variant="primary" onClick={handleSubmit}>Добавить счёт</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── MODULE 4: WAREHOUSE ──────────────────────────────────────────────────────
+function WarehouseModule({ products, setProducts, role }) {
+  const [modal, setModal] = useState(null);
+  const [movements, setMovements] = useState([
+    { id: 1, product: "Станок модульный", type: "Приход", qty: 5, date: "2025-06-10", project: null, status: "Оприходован" },
+    { id: 2, product: "Мольберт", type: "Резерв", qty: 3, date: "2025-06-12", project: "Проект #1", status: "В резерве" },
+    { id: 3, product: "Перфоратор Bosch", type: "Отгрузка", qty: 2, date: "2025-06-13", project: "Проект #2", status: "Отгружен" },
+  ]);
+
+  const receiveStock = ({ name, category, avgPrice, qty }) => {
+    const existing = products.find(p => p.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      setProducts(ps => ps.map(p => p.id === existing.id ? { ...p, stock: p.stock + qty, avgPrice } : p));
+      setMovements(ms => [...ms, { id: Date.now(), product: existing.name, type: "Приход", qty, date: new Date().toISOString().slice(0, 10), status: "Оприходован" }]);
+    } else {
+      const newProd = { id: Date.now(), name, category: category || "Без категории", stock: qty, avgPrice };
+      setProducts(ps => [...ps, newProd]);
+      setMovements(ms => [...ms, { id: Date.now() + 1, product: name, type: "Приход", qty, date: new Date().toISOString().slice(0, 10), status: "Оприходован" }]);
+    }
+  };
+
+  const shipStock = (productId, qty, project) => {
+    setProducts(ps => ps.map(p => p.id === productId ? { ...p, stock: Math.max(0, p.stock - qty) } : p));
+    setMovements(ms => [...ms, { id: Date.now(), product: products.find(p => p.id === productId)?.name, type: "Отгрузка", qty, date: new Date().toISOString().slice(0, 10), project, status: "Отгружен" }]);
+  };
+
+  return (
+    <div>
+      <h2 style={{ color: T.textPrimary, marginTop: 0, fontSize: 22 }}>🏭 Управление складом</h2>
+
+      <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
+        {[
+          { label: "Всего позиций", val: products.length },
+          { label: "В наличии", val: products.filter(p => p.stock > 0).length },
+          { label: "Нет на складе", val: products.filter(p => p.stock === 0).length, color: T.warning },
+          { label: "Движений сегодня", val: 3 },
+        ].map(k => (
+          <Card key={k.label} style={{ flex: 1, padding: "14px 16px" }}>
+            <div style={{ color: T.textSecondary, fontSize: 12, marginBottom: 4 }}>{k.label}</div>
+            <div style={{ color: k.color || T.textPrimary, fontWeight: 700, fontSize: 22 }}>{k.val}</div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Stock table */}
+      <Card style={{ marginBottom: 20, padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between" }}>
+          <span style={{ fontWeight: 600, color: T.textPrimary }}>Остатки на складе</span>
+          {(role === "Завсклад" || role === "ПМ") && (
+            <Btn size="sm" onClick={() => setModal({ type: "receive" })}>+ Оприходовать товар</Btn>
+          )}
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: T.bg }}>
+              {["Товар", "Категория", "Остаток", "Ср. цена закупа", "Стоимость остатка", "Действие"].map(h => (
+                <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: T.textSecondary, fontSize: 12, borderBottom: `1px solid ${T.border}` }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {products.map(p => (
+              <tr key={p.id} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
+                <td style={{ padding: "12px 16px", color: T.textPrimary, fontWeight: 500 }}>{p.name}</td>
+                <td style={{ padding: "12px 16px", color: T.textSecondary }}>{p.category}</td>
+                <td style={{ padding: "12px 16px" }}>
+                  <span style={{ color: p.stock === 0 ? T.danger : p.stock < 3 ? T.warning : T.success, fontWeight: 700 }}>{p.stock} шт.</span>
+                </td>
+                <td style={{ padding: "12px 16px", color: T.textSecondary }}>{fmt(p.avgPrice)}</td>
+                <td style={{ padding: "12px 16px", color: T.textPrimary }}>{fmt(p.avgPrice * p.stock)}</td>
+                <td style={{ padding: "12px 16px", display: "flex", gap: 8 }}>
+                  {role === "Завсклад" && p.stock > 0 && (
+                    <Btn size="sm" variant="warning" onClick={() => setModal({ type: "ship", product: p })}>Отгрузить</Btn>
+                  )}
+                  {role === "Завсклад" && (
+                    <Btn size="sm" variant="ghost" onClick={() => setModal({ type: "receive", hint: p.name, hintCategory: p.category, hintPrice: p.avgPrice })}>Приход</Btn>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+
+      {/* Movements */}
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.border}`, fontWeight: 600, color: T.textPrimary }}>История движений</div>
+        {movements.slice().reverse().map(m => (
+          <div key={m.id} style={{ padding: "12px 16px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <span style={{ color: T.textPrimary, fontWeight: 500 }}>{m.product}</span>
+              {m.project && <span style={{ color: T.textSecondary, fontSize: 12, marginLeft: 10 }}>→ {m.project}</span>}
+            </div>
+            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+              <span style={{ color: T.textSecondary, fontSize: 12 }}>{m.date}</span>
+              <span style={{ color: T.accent, fontWeight: 600 }}>{m.type === "Приход" ? "+" : "-"}{m.qty} шт.</span>
+              <Badge label={m.status} />
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      {modal?.type === "receive" && (
+        <ReceiveModal hint={modal.hint} hintCategory={modal.hintCategory} hintPrice={modal.hintPrice} onClose={() => setModal(null)} onReceive={receiveStock} />
+      )}
+      {modal?.type === "ship" && (
+        <ShipModal product={modal.product} onClose={() => setModal(null)} onShip={shipStock} />
+      )}
+    </div>
+  );
+}
+
+function ReceiveModal({ hint, hintCategory, hintPrice, onClose, onReceive }) {
+  const [form, setForm] = useState({ name: hint || "", category: hintCategory || "", avgPrice: hintPrice || "", qty: 1 });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const valid = form.name.trim() && form.avgPrice > 0 && form.qty > 0;
+
+  const inputStyle = { width: "100%", background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, color: T.textPrimary, padding: "8px 12px", fontSize: 14, boxSizing: "border-box" };
+
+  return (
+    <Modal title="Оприходование товара" onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div>
+          <label style={{ color: T.textSecondary, fontSize: 13, display: "block", marginBottom: 4 }}>Наименование товара *</label>
+          <input value={form.name} onChange={e => set("name", e.target.value)}
+            placeholder="Например: Станок модульный"
+            style={{ ...inputStyle, borderColor: form.name ? T.border : T.danger + "66" }} />
+          <div style={{ color: T.textMuted, fontSize: 11, marginTop: 3 }}>Если товар уже есть в каталоге — остаток обновится автоматически</div>
+        </div>
+        <div>
+          <label style={{ color: T.textSecondary, fontSize: 13, display: "block", marginBottom: 4 }}>Категория</label>
+          <input value={form.category} onChange={e => set("category", e.target.value)}
+            placeholder="Например: Оборудование" style={inputStyle} />
+        </div>
+        <div style={{ display: "flex", gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ color: T.textSecondary, fontSize: 13, display: "block", marginBottom: 4 }}>Цена закупа (тг) *</label>
+            <input type="number" min={0} value={form.avgPrice} onChange={e => set("avgPrice", Number(e.target.value))}
+              placeholder="0" style={{ ...inputStyle, borderColor: form.avgPrice > 0 ? T.border : T.danger + "66" }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ color: T.textSecondary, fontSize: 13, display: "block", marginBottom: 4 }}>Количество (шт.) *</label>
+            <input type="number" min={1} value={form.qty} onChange={e => set("qty", Number(e.target.value))}
+              style={{ ...inputStyle, borderColor: form.qty > 0 ? T.border : T.danger + "66" }} />
+          </div>
+        </div>
+        {!valid && <div style={{ color: T.warning, fontSize: 12 }}>⚠️ Заполните обязательные поля: наименование, цена и количество</div>}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 4 }}>
+          <Btn variant="ghost" onClick={onClose}>Отмена</Btn>
+          <Btn variant="success" disabled={!valid} onClick={() => { onReceive({ name: form.name.trim(), category: form.category.trim(), avgPrice: form.avgPrice, qty: form.qty }); onClose(); }}>
+            ✅ Оприходовать
+          </Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ShipModal({ product, onClose, onShip }) {
+  const [qty, setQty] = useState(1);
+  const [proj, setProj] = useState("Проект #1");
+  return (
+    <Modal title={`Отгрузка: ${product.name}`} onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <Alert text={`На складе: ${product.stock} шт.`} type="success" />
+        <div>
+          <label style={{ color: T.textSecondary, fontSize: 13, display: "block", marginBottom: 4 }}>Количество</label>
+          <input type="number" min={1} max={product.stock} value={qty} onChange={e => setQty(Number(e.target.value))}
+            style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, color: T.textPrimary, padding: "8px 12px", fontSize: 14, boxSizing: "border-box" }} />
+        </div>
+        <div>
+          <label style={{ color: T.textSecondary, fontSize: 13, display: "block", marginBottom: 4 }}>Проект</label>
+          <input value={proj} onChange={e => setProj(e.target.value)}
+            style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, color: T.textPrimary, padding: "8px 12px", fontSize: 14, boxSizing: "border-box" }} />
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <Btn variant="ghost" onClick={onClose}>Отмена</Btn>
+          <Btn variant="warning" onClick={() => { onShip(product.id, qty, proj); onClose(); }}>📤 Отгрузить</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── MODULE 5: ACCOUNTING ────────────────────────────────────────────────────
+function AccountingModule({ projects, setProjects, role }) {
+  const DOC_LABELS = { doverennost: "Доверенность", esf: "ЭСФ", nakladnaya: "Накладные", avr: "АВР" };
+
+  const toggleDoc = (projId, docKey) => {
+    setProjects(ps => ps.map(p => {
+      if (p.id !== projId) return p;
+      const newDocs = { ...p.docs, [docKey]: !p.docs[docKey] };
+      const allDone = Object.values(newDocs).every(Boolean);
+      return { ...p, docs: newDocs, status: allDone && p.status === "Активный закуп" ? "Завершено" : p.status };
+    }));
+  };
+
+  const allInvoices = projects.flatMap(p => p.invoices.map(inv => ({ ...inv, client: p.client, projId: p.id })));
+  const pending = allInvoices.filter(i => i.status === "Одобрено");
+  const paid = allInvoices.filter(i => i.status === "Оплачено");
+
+  const payInvoice = (projId, invId) => {
+    setProjects(ps => ps.map(p => {
+      if (p.id !== projId) return p;
+      return { ...p, invoices: p.invoices.map(i => i.id === invId ? { ...i, status: "Оплачено" } : i) };
+    }));
+  };
+
+  return (
+    <div>
+      <h2 style={{ color: T.textPrimary, marginTop: 0, fontSize: 22 }}>💼 Бухгалтерия и документооборот</h2>
+
+      <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
+        {[
+          { label: "К оплате", val: pending.length, color: T.warning },
+          { label: "Оплачено", val: paid.length, color: T.success },
+          { label: "Сумма к оплате", val: fmt(pending.reduce((s, i) => s + i.amount, 0)), color: T.warning },
+          { label: "Оплачено всего", val: fmt(paid.reduce((s, i) => s + i.amount, 0)), color: T.success },
+        ].map(k => (
+          <Card key={k.label} style={{ flex: 1, padding: "14px 16px" }}>
+            <div style={{ color: T.textSecondary, fontSize: 12, marginBottom: 4 }}>{k.label}</div>
+            <div style={{ color: k.color, fontWeight: 700, fontSize: k.val.toString().length > 6 ? 14 : 20 }}>{k.val}</div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Pending payments */}
+      <Card style={{ marginBottom: 20, padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.border}`, fontWeight: 600, color: T.textPrimary }}>
+          ⏳ Счета к оплате ({pending.length})
+        </div>
+        {pending.length === 0 && <div style={{ padding: 24, textAlign: "center", color: T.textMuted }}>Нет счетов к оплате</div>}
+        {pending.map(inv => (
+          <div key={inv.id} style={{ padding: "12px 16px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ color: T.textPrimary, fontWeight: 500 }}>{inv.supplier}</div>
+              <div style={{ color: T.textSecondary, fontSize: 12 }}>Клиент: {inv.client} · 📎 {inv.file}</div>
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <span style={{ color: T.accent, fontWeight: 700, fontSize: 16 }}>{fmt(inv.amount)}</span>
+              {role === "Бухгалтер" && <Btn size="sm" variant="success" onClick={() => payInvoice(inv.projId, inv.id)}>💳 Оплатить</Btn>}
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      {/* Document checklists */}
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.border}`, fontWeight: 600, color: T.textPrimary }}>
+          📋 Чек-лист закрывающих документов
+        </div>
+        {projects.map(p => {
+          const allDone = Object.values(p.docs).every(Boolean);
+          return (
+            <div key={p.id} style={{ padding: "14px 16px", borderBottom: `1px solid ${T.borderLight}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div>
+                  <div style={{ color: T.textPrimary, fontWeight: 600 }}>{p.client}</div>
+                  <div style={{ color: T.textSecondary, fontSize: 12 }}>ПМ: {p.pm}</div>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <Badge label={p.status} />
+                  {allDone && p.status !== "Завершено" && role === "Бухгалтер" && (
+                    <Btn size="sm" variant="success" onClick={() => setProjects(ps => ps.map(proj => proj.id === p.id ? { ...proj, status: "Завершено" } : proj))}>
+                      ✅ Закрыть проект
+                    </Btn>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {Object.entries(DOC_LABELS).map(([key, label]) => (
+                  <div key={key} onClick={() => role === "Бухгалтер" ? toggleDoc(p.id, key) : null}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "8px 14px",
+                      background: p.docs[key] ? T.success + "15" : T.bg,
+                      border: `1px solid ${p.docs[key] ? T.success : T.border}`,
+                      borderRadius: 8, cursor: role === "Бухгалтер" ? "pointer" : "default",
+                      color: p.docs[key] ? T.success : T.textSecondary, fontSize: 13, fontWeight: 500,
+                    }}>
+                    <span>{p.docs[key] ? "✅" : "⬜"}</span>
+                    {label}
+                  </div>
+                ))}
+              </div>
+              {!allDone && <div style={{ color: T.textMuted, fontSize: 12, marginTop: 8 }}>⚠️ Проект не может быть закрыт — не все документы получены</div>}
+            </div>
+          );
+        })}
+      </Card>
+    </div>
+  );
+}
+
+// ─── CATALOG ──────────────────────────────────────────────────────────────────
+function CatalogModule({ products, setProducts }) {
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({ name: "", category: "", avgPrice: "" });
+
+  const addProduct = () => {
+    if (!form.name || !form.avgPrice) return;
+    setProducts(ps => [...ps, { id: Date.now(), name: form.name, category: form.category, stock: 0, avgPrice: parseInt(form.avgPrice) }]);
+    setForm({ name: "", category: "", avgPrice: "" });
+    setModal(null);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <h2 style={{ color: T.textPrimary, margin: 0, fontSize: 22 }}>📦 Каталог товаров</h2>
+        <Btn onClick={() => setModal(true)}>+ Добавить товар</Btn>
+      </div>
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: T.bg }}>
+              {["ID", "Наименование", "Категория", "Остаток на складе", "Ср. цена закупа", "Стоимость остатка"].map(h => (
+                <th key={h} style={{ padding: "12px 16px", textAlign: "left", color: T.textSecondary, fontSize: 12, borderBottom: `1px solid ${T.border}` }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((p, i) => (
+              <tr key={p.id} style={{ borderBottom: `1px solid ${T.borderLight}`, background: i % 2 === 0 ? "transparent" : T.bg + "80" }}>
+                <td style={{ padding: "12px 16px", color: T.textMuted, fontSize: 12 }}>#{p.id}</td>
+                <td style={{ padding: "12px 16px", color: T.textPrimary, fontWeight: 500 }}>{p.name}</td>
+                <td style={{ padding: "12px 16px", color: T.textSecondary }}>{p.category}</td>
+                <td style={{ padding: "12px 16px" }}>
+                  <span style={{ color: p.stock === 0 ? T.danger : p.stock < 3 ? T.warning : T.success, fontWeight: 700 }}>{p.stock} шт.</span>
+                </td>
+                <td style={{ padding: "12px 16px", color: T.textSecondary }}>{fmt(p.avgPrice)}</td>
+                <td style={{ padding: "12px 16px", color: T.textPrimary, fontWeight: 600 }}>{fmt(p.avgPrice * p.stock)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+
+      {modal && (
+        <Modal title="Добавить товар в каталог" onClose={() => setModal(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {[["Наименование", "name", "text"], ["Категория", "category", "text"], ["Средняя цена закупа (тг)", "avgPrice", "number"]].map(([label, key, type]) => (
+              <div key={key}>
+                <label style={{ color: T.textSecondary, fontSize: 13, display: "block", marginBottom: 4 }}>{label}</label>
+                <input type={type} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                  style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, color: T.textPrimary, padding: "8px 12px", fontSize: 14, boxSizing: "border-box" }} />
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <Btn variant="ghost" onClick={() => setModal(null)}>Отмена</Btn>
+              <Btn variant="success" onClick={addProduct}>Добавить</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+function Dashboard({ projects, products }) {
+  const totalRevenue = projects.flatMap(p => p.items).reduce((s, i) => s + (i.price || 0) * i.qty, 0);
+  const totalCost = projects.flatMap(p => p.items).reduce((s, i) => s + (i.cost || 0) * i.qty, 0);
+  const margin = totalRevenue ? Math.round((totalRevenue - totalCost) / totalRevenue * 100) : 0;
+  const alerts = projects.flatMap(p => p.invoices.filter(i => i.alert));
+
+  const statuses = ["Черновик КП", "Ожидание подписания", "Активный закуп", "Завершено"];
+  const byStatus = statuses.map(s => ({ label: s, count: projects.filter(p => p.status === s).length }));
+
+  return (
+    <div>
+      <h2 style={{ color: T.textPrimary, marginTop: 0, fontSize: 22 }}>📊 Дашборд</h2>
+
+      {alerts.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          {alerts.map((a, i) => <Alert key={i} text={`🚨 ${a.alertText || "Требует внимания Комдира"}`} type="danger" />)}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
+        {[
+          { label: "Всего проектов", val: projects.length, color: T.textPrimary },
+          { label: "Активных", val: projects.filter(p => p.status === "Активный закуп").length, color: T.accent },
+          { label: "Завершено", val: projects.filter(p => p.status === "Завершено").length, color: T.success },
+          { label: "Выручка", val: fmt(totalRevenue), color: T.accent },
+          { label: "Маржинальность", val: margin + "%", color: margin >= 25 ? T.success : T.warning },
+        ].map(k => (
+          <Card key={k.label} style={{ flex: 1, padding: "16px" }}>
+            <div style={{ color: T.textSecondary, fontSize: 12, marginBottom: 6 }}>{k.label}</div>
+            <div style={{ color: k.color, fontWeight: 700, fontSize: 20 }}>{k.val}</div>
+          </Card>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
+        <Card style={{ flex: 2 }}>
+          <div style={{ fontWeight: 600, color: T.textPrimary, marginBottom: 14 }}>Проекты по статусам</div>
+          {byStatus.map(s => (
+            <div key={s.label} style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ color: T.textSecondary, fontSize: 13 }}>{s.label}</span>
+                <span style={{ color: T.textPrimary, fontWeight: 600 }}>{s.count}</span>
+              </div>
+              <div style={{ background: T.bg, borderRadius: 4, height: 6, overflow: "hidden" }}>
+                <div style={{ width: `${projects.length ? s.count / projects.length * 100 : 0}%`, height: "100%", background: statusColor(s.label), borderRadius: 4, transition: "width .4s" }} />
+              </div>
+            </div>
+          ))}
+        </Card>
+
+        <Card style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, color: T.textPrimary, marginBottom: 14 }}>Склад</div>
+          <div style={{ color: T.textSecondary, fontSize: 13, marginBottom: 8 }}>Позиций в каталоге: <b style={{ color: T.textPrimary }}>{products.length}</b></div>
+          <div style={{ color: T.textSecondary, fontSize: 13, marginBottom: 8 }}>В наличии: <b style={{ color: T.success }}>{products.filter(p => p.stock > 0).length}</b></div>
+          <div style={{ color: T.textSecondary, fontSize: 13, marginBottom: 8 }}>Нет на складе: <b style={{ color: T.danger }}>{products.filter(p => p.stock === 0).length}</b></div>
+          <div style={{ color: T.textSecondary, fontSize: 13 }}>Общая стоимость: <b style={{ color: T.accent }}>{fmt(products.reduce((s, p) => s + p.avgPrice * p.stock, 0))}</b></div>
+        </Card>
+
+        <Card style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, color: T.textPrimary, marginBottom: 14 }}>Конвейер проекта</div>
+          {["AI-Парсинг", "КП утверждено", "Договор подписан", "Закуп идёт", "Отгружено", "Документы"].map((step, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <div style={{ width: 24, height: 24, borderRadius: "50%", background: i < 3 ? T.success : i === 3 ? T.accent : T.border, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", flexShrink: 0 }}>{i + 1}</div>
+              <span style={{ color: i < 3 ? T.textPrimary : T.textMuted, fontSize: 13 }}>{step}</span>
+            </div>
+          ))}
+        </Card>
+      </div>
+
+      <Card>
+        <div style={{ fontWeight: 600, color: T.textPrimary, marginBottom: 14 }}>Последние проекты</div>
+        {projects.map(p => (
+          <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${T.borderLight}` }}>
+            <div>
+              <div style={{ color: T.textPrimary, fontWeight: 500 }}>{p.client}</div>
+              <div style={{ color: T.textSecondary, fontSize: 12 }}>ПМ: {p.pm} · Маржа: {p.margin}%</div>
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              {p.invoices.some(i => i.alert) && <span style={{ color: T.danger, fontSize: 12 }}>🚨 Алерт</span>}
+              <Badge label={p.status} />
+            </div>
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+function App() {
+  const [tab, setTab] = useState("dashboard");
+  const [role, setRole] = useState("ПМ");
+  const [products, setProducts] = useState(INITIAL_PRODUCTS);
+  const [projects, setProjects] = useState(INITIAL_PROJECTS);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", background: T.bg, fontFamily: "'Inter', system-ui, sans-serif", color: T.textPrimary }}>
+      <style>{`* { box-sizing: border-box; margin: 0; padding: 0; } input, select { outline: none; } @keyframes pulse { from { opacity: 0.4 } to { opacity: 1 } }`}</style>
+
+      {/* Sidebar */}
+      <div style={{ width: sidebarOpen ? 220 : 60, background: T.surface, borderRight: `1px solid ${T.border}`, flexShrink: 0, display: "flex", flexDirection: "column", transition: "width .2s" }}>
+        {/* Logo */}
+        <div style={{ padding: "18px 16px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 32, height: 32, background: T.accent, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>⚡</div>
+          {sidebarOpen && <span style={{ fontWeight: 700, fontSize: 15, color: T.textPrimary, whiteSpace: "nowrap" }}>AI-ERP</span>}
+        </div>
+
+        {/* Role switcher */}
+        {sidebarOpen && (
+          <div style={{ padding: "12px 12px", borderBottom: `1px solid ${T.border}` }}>
+            <div style={{ color: T.textMuted, fontSize: 11, marginBottom: 6, fontWeight: 600 }}>РОЛЬ</div>
+            <select value={role} onChange={e => setRole(e.target.value)}
+              style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, borderRadius: 6, color: T.textPrimary, padding: "6px 8px", fontSize: 13 }}>
+              {ROLES.map(r => <option key={r}>{r}</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: "8px 0" }}>
+          {TABS.map(t => (
+            <div key={t.id} onClick={() => setTab(t.id)}
+              style={{
+                display: "flex", alignItems: "center", gap: 10, padding: sidebarOpen ? "10px 16px" : "10px 0", justifyContent: sidebarOpen ? "flex-start" : "center",
+                background: tab === t.id ? T.accent + "22" : "transparent",
+                borderLeft: tab === t.id ? `3px solid ${T.accent}` : "3px solid transparent",
+                cursor: "pointer", transition: "all .12s",
+              }}>
+              <span style={{ fontSize: 17 }}>{t.icon}</span>
+              {sidebarOpen && <span style={{ fontSize: 13, fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? T.textPrimary : T.textSecondary, whiteSpace: "nowrap" }}>{t.label}</span>}
+              {t.id === "procurement" && projects.some(p => p.invoices.some(i => i.alert)) && (
+                <span style={{ marginLeft: "auto", background: T.danger, borderRadius: "50%", width: 8, height: 8, display: "inline-block" }} />
+              )}
+            </div>
+          ))}
+        </nav>
+
+        {/* Toggle */}
+        <div onClick={() => setSidebarOpen(o => !o)}
+          style={{ padding: 14, borderTop: `1px solid ${T.border}`, cursor: "pointer", color: T.textMuted, textAlign: "center", fontSize: 16 }}>
+          {sidebarOpen ? "◀" : "▶"}
+        </div>
+      </div>
+
+      {/* Main */}
+      <div style={{ flex: 1, overflow: "auto", padding: 28 }}>
+        {/* Top bar */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+          <div>
+            <div style={{ color: T.textMuted, fontSize: 12 }}>Текущая роль</div>
+            <div style={{ color: T.textPrimary, fontWeight: 600, fontSize: 16 }}>{role}</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {projects.some(p => p.invoices.some(i => i.alert)) && (
+              <div style={{ background: T.danger + "20", border: `1px solid ${T.danger}40`, borderRadius: 8, padding: "6px 12px", color: T.danger, fontSize: 13, fontWeight: 600 }}>
+                🚨 {projects.flatMap(p => p.invoices.filter(i => i.alert)).length} алерт(а) цен
+              </div>
+            )}
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", color: T.textSecondary, fontSize: 13 }}>
+              {new Date().toLocaleDateString("ru-KZ")}
+            </div>
+          </div>
+        </div>
+
+        {tab === "dashboard" && <Dashboard projects={projects} products={products} />}
+        {tab === "parser" && <ParserModule products={products} />}
+        {tab === "projects" && <ProjectsModule projects={projects} setProjects={setProjects} role={role} />}
+        {tab === "procurement" && <ProjectsModule projects={projects} setProjects={setProjects} role={role} />}
+        {tab === "warehouse" && <WarehouseModule products={products} setProducts={setProducts} role={role} />}
+        {tab === "accounting" && <AccountingModule projects={projects} setProjects={setProjects} role={role} />}
+        {tab === "catalog" && <CatalogModule products={products} setProducts={setProducts} />}
+      </div>
+    </div>
+  );
+}
+
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
