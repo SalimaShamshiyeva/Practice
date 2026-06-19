@@ -200,11 +200,6 @@ POST /projects/{id}/approve
 
 ---
 
-## 🧾 Лицензия
-
-Private / Internal Use
-
----
 
 ## 💡 Проект
 
