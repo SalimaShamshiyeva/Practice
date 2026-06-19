@@ -1,4 +1,4 @@
-# CRM System (ERP Module)
+# Kerneu Group (ERP Module)
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-green?logo=fastapi)
@@ -10,7 +10,7 @@
 
 ## 📌 Описание проекта
 
-**Kerneu Group** — корпоративная система управления проектами и закупками.
+**AI-ERP_MVP** — корпоративная система управления проектами и закупками.
 
 Система предназначена для автоматизации бизнес-процессов внутри компании:
 - управление проектами
