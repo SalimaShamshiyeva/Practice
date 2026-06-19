@@ -1,7 +1,4 @@
 # Practice
-Вот тебе **чистый готовый код для `README.md`**, просто вставляй как есть:
-
-```md
 # 🤖 AI-ERP System
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python)
