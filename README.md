@@ -1,5 +1,6 @@
-# Practice
-# 🤖 AI-ERP System
+
+```md
+# 📊 CRM System (ERP Module)
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-green?logo=fastapi)
@@ -11,18 +12,26 @@
 
 ## 📌 Описание проекта
 
-**AI-ERP System** — корпоративная ERP-система для автоматизации процессов закупок с AI-парсингом документов (PDF / Excel), ролевой системой и управлением проектами.
+**CRM System** — корпоративная система управления проектами и закупками.
+
+Система предназначена для автоматизации бизнес-процессов внутри компании:
+- управление проектами
+- обработка документов (PDF / Excel)
+- контроль закупок и поставок
+- распределение задач по ролям
+- согласование этапов между отделами
 
 ---
 
-## 🚀 Возможности
+## 🚀 Основные возможности
 
-- 📄 AI-парсинг PDF и Excel файлов  
-- 👥 Ролевая система доступа (PM, Коммерческий директор, Бухгалтер, Завсклад)  
-- 📦 Управление проектами закупок  
+- 📦 Создание и ведение проектов закупок  
+- 📄 Загрузка и обработка документов (PDF / Excel)  
+- 👥 Ролевая модель доступа (RBAC)  
+- 🔄 Workflow согласований (PM → Комдир → Бухгалтер → Склад)  
 - 💰 Контроль счетов и оплат  
-- 🔄 Workflow согласований  
-- ⚙️ REST API на FastAPI  
+- 📊 Отслеживание статусов проектов  
+- ⚙️ REST API для интеграций  
 
 ---
 
@@ -32,11 +41,11 @@
 - FastAPI  
 - Uvicorn  
 - Docker  
-- PostgreSQL (в разработке)  
+- PostgreSQL (планируется)  
 
 ---
 
-## 🏗️ Архитектура
+## 🏗️ Архитектура системы
 
 ```
 
@@ -47,8 +56,6 @@ FastAPI Backend
 Business Logic Layer
 ↓
 PostgreSQL Database
-↓
-AI Parsing Engine
 
 ````
 
@@ -56,7 +63,7 @@ AI Parsing Engine
 
 ## ⚙️ Установка и запуск
 
-### 📥 Клонирование проекта
+### 📥 Клонирование
 
 ```bash
 git clone <repo-url>
@@ -65,11 +72,11 @@ cd Ustem_group_crm
 
 ---
 
-### 🐳 Запуск через Docker
+### 🐳 Docker запуск
 
 ```bash
-docker build -t ai-erp .
-docker run -p 8000:8000 ai-erp
+docker build -t crm-system .
+docker run -p 8000:8000 crm-system
 ```
 
 ---
@@ -78,15 +85,10 @@ docker run -p 8000:8000 ai-erp
 
 ```bash
 python -m venv venv
-
-# Mac/Linux
-source venv/bin/activate
-
-# Windows
-venv\Scripts\activate
+source venv/bin/activate  # Mac/Linux
+venv\Scripts\activate     # Windows
 
 pip install -r requirements.txt
-
 uvicorn main:app --reload
 ```
 
@@ -111,24 +113,24 @@ Ustem_group_crm/
 
 ---
 
-## 👥 Роли пользователей
+## 👥 Роли в системе
 
 ### 👨‍💼 Project Manager (PM)
 
 * Создание проектов
 * Загрузка документов
-* Проверка AI-парсинга
-* Редактирование данных
+* Проверка данных
+* Редактирование товаров и цен
 
 ### 📊 Commercial Director
 
 * Утверждение проектов
-* Контроль маржинальности
+* Контроль бюджета и маржи
 
 ### 💰 Accountant
 
-* Финансовые операции
-* Счета и оплаты
+* Работа со счетами
+* Финансовый контроль
 
 ### 📦 Warehouse Manager
 
@@ -137,21 +139,16 @@ Ustem_group_crm/
 
 ---
 
-## 🔄 Workflow системы
+## 🔄 Workflow
 
 ```
-Создание проекта
-→ Загрузка файла
-→ AI-парсинг
-→ Проверка PM
-→ Утверждение Комдиром
-→ Бухгалтерия
-→ Отгрузка
+Создание проекта → Загрузка файла → Проверка PM → Утверждение →
+Финансы → Отгрузка → Завершение
 ```
 
 ---
 
-## 📡 API
+## 📡 API Endpoints
 
 ```http
 POST /projects/create
@@ -164,23 +161,34 @@ POST /projects/{id}/approve
 
 ## 📌 TODO
 
-* [ ] Подключить PostgreSQL
-* [ ] Добавить JWT авторизацию
-* [ ] Сделать frontend на React
+* [ ] Подключение PostgreSQL
+* [ ] JWT авторизация
+* [ ] Frontend на React
 * [ ] Role-based UI
-* [ ] Улучшить AI-парсер
 * [ ] Логирование действий
+* [ ] Улучшение workflow
 
 ---
 
 ## 🧾 Лицензия
 
-Private project / Internal use only
+Private / Internal Use
 
 ---
 
-## 💡 Автор
+## 💡 Проект
 
-AI-ERP System — система для автоматизации корпоративных закупок и документооборота.
+CRM система для автоматизации внутренних бизнес-процессов компании (закупки, проекты, документы, финансы).
+
+```
+
+---
+
+Если хочешь, я могу дальше:
+- делать README **как у реально стартапа (очень красивый UI стиль)**
+- или помочь тебе правильно назвать проект (CRM / ERP / Procurement System)
+- или подготовить тебе **презентацию для защиты проекта (очень важно для универа)**
+```
+
 
 
